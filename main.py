@@ -26,7 +26,10 @@ requests.packages.urllib3.disable_warnings()
 
 # 登录函数
 def login(max_retries=5):
-    url = "https://gym.sztu.edu.cn/mapi/auth/login?username=202401103010&password=sztu%40217186"
+    """
+    在下面把你的账号密码进行替换
+    """
+    url = "https://gym.sztu.edu.cn/mapi/auth/login?username=账号&password=密码"
     for attempt in range(max_retries):
         try:
             response = requests.get(url, headers=HEADERS, verify=False)
