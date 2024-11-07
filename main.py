@@ -109,7 +109,7 @@ def place_booking(Id):
                 logger.warning(f"{msg}，稍后重试")
                 time.sleep(random.uniform(0.3, 0.7))  # 随机延时
                 continue
-            elif "成功" in msg:  # 假设"成功"在成功消息中
+            elif "success" in msg:  # 假设"成功"在消息中
                 order = json_response.get("data", {}).get("orderNo")
                 logger.info(msg)
                 return msg, order
