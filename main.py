@@ -101,13 +101,13 @@ def place_booking(Id):
             logger.error("预订超时，超过6分钟")
             raise Exception("预订失败，超过6分钟")
         try:
-            response = requests.post(url, json=payload, headers=headers, verify=False, timeout=10)
+            response = requests.post(url, json=payload, headers=headers, verify=False,timeout=3)
             response.raise_for_status()
             json_response = response.json()
             msg = json_response.get("msg")
-            if "系统繁忙,请稍后再试" in msg or "当前时间不可预定，未到可提前预约时间" in msg:
+            if "系统繁忙,请稍后再试" in msg or "当前时间不可预定，未到可提前预约时间" in msg or "系统错误，请联系管理员" in msg:
                 logger.warning(f"{msg}，稍后重试")
-                time.sleep(random.uniform(0.5, 1.5))  # 随机延时
+                time.sleep(random.uniform(0.3, 0.7))  # 随机延时
                 continue
             elif "成功" in msg:  # 假设"成功"在成功消息中
                 order = json_response.get("data", {}).get("orderNo")
