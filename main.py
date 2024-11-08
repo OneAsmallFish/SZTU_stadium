@@ -81,17 +81,24 @@ def get_info(max_retries=20):
 
 # 处理球场信息
 def found_info(data, target_start_time, date):
-    last_record_id = None
+    last_record = None
     for record in data.get(date, []):
         if record["startTime"] == target_start_time:
-            return record["id"]
-        last_record_id = record["id"]  # 记录最后一个时间段的id
-    return last_record_id  # 如果找不到target_start_time，返回最后一个时间段的id
+            return {"id": record["id"], "ticketPrice": record["ticketPrice"]}
+        last_record = record  # 记录最后一个时间段的记录
+    if last_record:
+        return {"id": last_record["id"], "ticketPrice": last_record["ticketPrice"]}
+    return None  # 如果找不到任何记录，返回None
 
 # 预定球场
-def place_booking(Id):
+def place_booking(info):
     url = "https://gym.sztu.edu.cn/mapi/user/order/create"
-    payload = {"siteSessionId": Id, "pointsDeduction": 70, "payType": 5, "peerUserNum": []}
+    payload = {
+        "siteSessionId": info["id"], 
+        "pointsDeduction": info["ticketPrice"], 
+        "payType": 5, 
+        "peerUserNum": []
+    }
     headers = get_headers()
 
     start_time = time.time()  # 初始化开始时间
@@ -101,11 +108,11 @@ def place_booking(Id):
             logger.error("预订超时，超过6分钟")
             raise Exception("预订失败，超过6分钟")
         try:
-            response = requests.post(url, json=payload, headers=headers, verify=False,timeout=3)
+            response = requests.post(url, json=payload, headers=headers, verify=False, timeout=3)
             response.raise_for_status()
             json_response = response.json()
             msg = json_response.get("msg")
-            if "系统繁忙,请稍后再试" in msg or "当前时间不可预定，未到可提前预约时间" in msg or "系统错误，请联系管理员" in msg:
+            if any(err_msg in msg for err_msg in ["系统繁忙,请稍后再试", "当前时间不可预定，未到可提前预约时间", "系统错误，请联系管理员"]):
                 logger.warning(f"{msg}，稍后重试")
                 time.sleep(random.uniform(0.3, 0.7))  # 随机延时
                 continue
@@ -121,7 +128,7 @@ def place_booking(Id):
             time.sleep(random.uniform(0.5, 1.5))  # 随机延时
 
 # 支付函数
-def pay_order(order, max_retries=5):
+def pay_order(order, max_retries=50):
     url = "https://gym.sztu.edu.cn/mapi/pay/pay"
     payload = {"orderNo": order, "payType": 5}
     headers = get_headers()
@@ -135,21 +142,21 @@ def pay_order(order, max_retries=5):
             return msg
         except requests.RequestException as e:
             logger.warning(f"支付失败，尝试重连 (尝试 {attempt + 1}/{max_retries}): {e}")
-            time.sleep(random.uniform(0.5, 1.5))  # 随机延时
+            time.sleep(random.uniform(5, 10))  # 随机延时
     raise Exception("支付失败，超过最大重试次数")
 
 # 主函数
 def main():
-    target_start_time = "20:20:00"
+    target_start_time = "08:30:00"
     '''
     订当日用 datetime.now().strftime("%Y-%m-%d")
     订次日用 (datetime.now() + timedelta(days=1)).strftime("%Y-%m-%d")
     '''
     next_day_date = (datetime.now() + timedelta(days=1)).strftime("%Y-%m-%d")
     data = get_info()
-    Id = found_info(data, target_start_time, next_day_date)
-    if Id:
-        msg, order = place_booking(Id)
+    info = found_info(data, target_start_time, next_day_date)
+    if info:
+        msg, order = place_booking(info)
         if "票已售罄" not in msg:
             pay_order(order)
         else:
