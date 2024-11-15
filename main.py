@@ -1,4 +1,7 @@
 import requests
+import re
+import base64
+import ddddocr
 import logging
 import random
 import time
@@ -24,18 +27,74 @@ HEADERS = {
 }
 requests.packages.urllib3.disable_warnings()
 
-# 登录函数
-def login(max_retries=5):
-    """
-    在下面把你的账号密码进行替换
-    """
-    url = "https://gym.sztu.edu.cn/mapi/auth/login?username=账号&password=密码"
+# 验证码获取
+def get_captcha(max_retries=20):
+    url = "https://gym.sztu.edu.cn/mapi/auth/captcha"
     for attempt in range(max_retries):
         try:
             response = requests.get(url, headers=HEADERS, verify=False)
             response.raise_for_status()
-            return response.json().get("data").get("web-x-auth-token")
+            data = response.json().get('data', {})
+            captcha_base64 = data.get('captcha')
+            uuid = data.get('uuid')
+
+            if not captcha_base64 or not uuid:
+                raise ValueError("无法获取验证码数据或UUID")
+
+            uuid_suffix = uuid.split(':')[-1]
+            image_data = base64.b64decode(captcha_base64)
+            return image_data, uuid_suffix
+
         except requests.RequestException as e:
+            logger.warning(f"获取验证码失败，尝试重新获取 (尝试 {attempt + 1}/{max_retries}): {e}")
+            time.sleep(random.uniform(0.5, 1))
+    raise Exception("获取验证码失败，超过最大尝试次数")
+
+# 验证码识别
+def recognize_captcha(image_data):
+    ocr = ddddocr.DdddOcr()
+    ocr.set_ranges("0123456789+-x/=")
+    result = ocr.classification(image_data, probability=True)
+
+    captcha_result = "".join(result['charsets'][temp.index(max(temp))] for temp in result['probability'])
+
+    digits = re.findall(r'\d', captcha_result)
+    operators = re.findall(r'[+-/*]', captcha_result)
+
+    if len(digits) != 2 or len(operators) != 1:
+        raise ValueError("无法识别正确的验证码格式")
+
+    num1, num2 = map(int, digits)
+    operator = operators[0]
+    expression = f"{num1}{operator}{num2}"
+    return eval(expression)
+
+def captcha_code(max_retries=20):
+    image_data, uuid_suffix = get_captcha(max_retries)
+    code_result = recognize_captcha(image_data)
+    logger.info("验证码识别成功")
+    return code_result, uuid_suffix
+
+# 登录函数
+def login(max_retries=20):
+    for attempt in range(max_retries):
+        try:
+            code, uuid = captcha_code()
+            """
+            在下面把你的账号密码进行替换
+            """
+            url = f"https://gym.sztu.edu.cn/mapi/auth/login?username=账号&password=密码&code={code}&uuid=captcha%3A{uuid}"
+            response = requests.get(url, headers=HEADERS, verify=False)
+            response.raise_for_status()
+            json_response = response.json()
+            
+            # 检查 msg 是否包含 "success"
+            if json_response.get("msg") != "success":
+                logger.warning(f"登录失败，返回信息：{json_response.get('msg')}")
+                raise ValueError("登录失败，未成功")
+            
+            return json_response.get("data").get("web-x-auth-token")
+        except (requests.RequestException, ValueError) as e:
             logger.warning(f"登录失败，尝试重连 (尝试 {attempt + 1}/{max_retries}): {e}")
             time.sleep(random.uniform(0.5, 1.5))  # 随机延时
     raise Exception("登录失败，超过最大重试次数")
@@ -147,7 +206,7 @@ def pay_order(order, max_retries=50):
 
 # 主函数
 def main():
-    target_start_time = "08:30:00"
+    target_start_time = "20:20:00"
     '''
     订当日用 datetime.now().strftime("%Y-%m-%d")
     订次日用 (datetime.now() + timedelta(days=1)).strftime("%Y-%m-%d")
