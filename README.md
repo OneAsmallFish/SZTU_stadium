@@ -3,7 +3,6 @@
 _需自配环境（本人只在python3.12.0下测试)_  
 pip安装库：requests，logging，datetime  
 **记得修改账号密码再使用**
-![2024-11-05_234216](https://github.com/user-attachments/assets/0e8febec-4fe8-4209-892b-a21e253cb066)  
-
+![image](https://github.com/user-attachments/assets/2142574b-fabb-4468-8e03-ef2eb0e6e0d1)
 
 **有服务器可以自配容器自动运行**
