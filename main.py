@@ -100,11 +100,11 @@ def login(max_retries=20):
     raise Exception("登录失败，超过最大重试次数")
 
 # 获取请求头
-def get_headers():
+def get_headers(auth_token):
     return {
         "Content-Length": "96",
         "Xweb_Xhr": "1",
-        "Web-X-Auth-Token": login(),
+        "Web-X-Auth-Token": auth_token,
         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36 MicroMessenger/7.0.20.1781(0x6700143B) NetType/WIFI MiniProgramEnv/Windows WindowsWechat/WMPF WindowsWechat(0x63090c11)XWEB/11275",
         "Content-Type": "application/json",
         "Accept": "*/*",
@@ -114,14 +114,14 @@ def get_headers():
     }
 
 # 获取球场信息
-def get_info(max_retries=20):
+def get_info(auth_token, max_retries=20):
     url = "https://gym.sztu.edu.cn/mapi/venue/site/session/list"
     '''
     "blockType"中：1表示拼场，2表示包场
     "siteDateType"中：1表示当日，2表示次日
     '''
     payload = {"venueId": 3, "blockType": 2, "siteDateType": 2, "sessionType": 0, "stock": None, "timeQuantumType": None}
-    headers = get_headers()
+    headers = get_headers(auth_token)
 
     for attempt in range(max_retries):
         try:
@@ -150,7 +150,7 @@ def found_info(data, target_start_time, date):
     return None  # 如果找不到任何记录，返回None
 
 # 预定球场
-def place_booking(info):
+def place_booking(info, auth_token):
     url = "https://gym.sztu.edu.cn/mapi/user/order/create"
     payload = {
         "siteSessionId": info["id"], 
@@ -158,7 +158,7 @@ def place_booking(info):
         "payType": 5, 
         "peerUserNum": []
     }
-    headers = get_headers()
+    headers = get_headers(auth_token)
 
     start_time = time.time()  # 初始化开始时间
 
@@ -187,10 +187,10 @@ def place_booking(info):
             time.sleep(random.uniform(0.5, 1.5))  # 随机延时
 
 # 支付函数
-def pay_order(order, max_retries=50):
+def pay_order(order, auth_token, max_retries=50):
     url = "https://gym.sztu.edu.cn/mapi/pay/pay"
     payload = {"orderNo": order, "payType": 5}
-    headers = get_headers()
+    headers = get_headers(auth_token)
 
     for attempt in range(max_retries):
         try:
@@ -212,12 +212,13 @@ def main():
     订次日用 (datetime.now() + timedelta(days=1)).strftime("%Y-%m-%d")
     '''
     next_day_date = (datetime.now() + timedelta(days=1)).strftime("%Y-%m-%d")
-    data = get_info()
+    auth_token = login()  # 获取并存储auth_token
+    data = get_info(auth_token)
     info = found_info(data, target_start_time, next_day_date)
     if info:
-        msg, order = place_booking(info)
+        msg, order = place_booking(info, auth_token)
         if "票已售罄" not in msg:
-            pay_order(order)
+            pay_order(order, auth_token)
         else:
             logger.info("票已售罄，跳过支付")
     else:
